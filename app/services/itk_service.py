@@ -4,10 +4,13 @@ from app.models.semantic_search import SemanticSearch
 from app.models.web_search import WebSearchResult
 from app.services.llm_service import LLMService
 from langchain_core.prompts import ChatPromptTemplate
-from utills.logging import logger
+from langchain.schema import Document
+from typing import List
+from app.utils.logging import logger
 from app.services.scrape_service import CompanyWebScraper
 from app.services.vectorstore_service import VectorStoreService
 import pandas as pd
+
 
 class ITKService:
     def __init__(self):
@@ -15,7 +18,7 @@ class ITKService:
         self.vector_store_service = VectorStoreService()
         self.llm_service = LLMService()
 
-    async def chat_with_itk(self, query: str, company_name: str = None):
+    async def chat(self, query: str, company_name: str = None):
         """
         Chat with ITK
         """
@@ -38,7 +41,7 @@ class ITKService:
         df = pd.read_csv(file_path)
         return df
     
-    def parse_results(self, results: list, df: pd.DataFrame):
+    def parse_results(self, results: List[Document] , df: pd.DataFrame):
         """
         Parse the results from the scrape service and return a dictionary of company documents.
         """
@@ -69,8 +72,8 @@ class ITKService:
 
             1. Recent web search results: {web_search}
             2. Information from our database: {semantic_search}
-
-            User Query: {query}
+            
+            Query: {query}
 
             Please provide a comprehensive and accurate response that:
             - Prioritizes the most recent and relevant information
@@ -79,19 +82,20 @@ class ITKService:
             - Focuses on directly answering the user's query
             - For company-specific queries, emphasizes information from our database first
             - For industry or multi-company queries, synthesizes information from both sources
-
+            
             If you don't have enough information to fully answer the query, be transparent about what you do and don't know.
 
+
             Response:
+
             """
         )
-        # If there are any discrepancies between sources, acknowledge them and explain which is likely more current.
 
         chain = prompt | self.llm_service.model
 
         response = await chain.ainvoke({
-            "web_search": web_search.model_dump_json(),
-            "semantic_search": semantic_search.model_dump_json(),
+            "web_search": web_search.model_dump(),
+            "semantic_search": semantic_search.model_dump(),
             "query": query
         })
 
@@ -104,6 +108,8 @@ class ITKService:
         all_urls = df['URL'].tolist()
         results = await self.scrape_service.scrape_content(all_urls)
 
+        logger.info(f"scraped {len(results)} links")
+
         # Parse the results
         company_docs = self.parse_results(results, df)
 
@@ -115,7 +121,7 @@ class ITKService:
 
         await asyncio.gather(*tasks)
 
-        logger.info(f"scraped and stored data for {len(results)} companies")
+        logger.info(f"scraped and stored data for {len(results)} links")
 
     @abstractmethod
     def load_data_from_db(self):

@@ -16,3 +16,4 @@ BeautifulSoup4
 playwright==1.50.0
 langchain-core
 python-multipart
+apscheduler

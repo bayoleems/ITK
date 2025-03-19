@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
+from app.utils.logging import logger
 from playwright.async_api import async_playwright
 from langchain_core.documents import Document
 from datetime import datetime
@@ -20,20 +21,19 @@ class CompanyWebScraper:
         Scrape content from multiple URLs concurrently using BeautifulSoup first,
         falling back to Playwright if needed
         """
-        
+
         if isinstance(urls, str):
             urls = [urls]
-            
+
         results = []
         
         async def process_url(url, session):
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
-            
             try:
                 # First try with aiohttp
-                async with session.get(url, headers=headers) as response:
+                async with session.get(url, headers=headers) as response:     
                     if response.status == 200:
                         html = await response.text()
                         soup = BeautifulSoup(html, "html.parser")
@@ -45,35 +45,33 @@ class CompanyWebScraper:
                             page_content=clean_content,
                             metadata={"source": url, "timestamp": datetime.now().isoformat()}
                         )
-                        
+                    else:
+                        logger.info(f"aiohttp failed for {url}, trying Playwright")
+                        # Fall back to Playwright
+                        async with async_playwright() as p:
+                            browser = await p.chromium.launch(headless=True)
+                            page = await browser.new_page()
+                            
+                            await page.goto(url)
+                            await page.wait_for_load_state("networkidle")
+                            
+                            html = await page.content()
+                            soup = BeautifulSoup(html, "html.parser")
+                            
+                            text = ' \n'.join(soup.stripped_strings)
+                            clean_content = await self.clean_text(text)
+                            
+                            await browser.close()
+                            return Document(
+                                page_content=clean_content,
+                                metadata={"source": url, "timestamp": datetime.now().isoformat()}
+                            )            
             except Exception as e:
-                print(f"aiohttp failed for {url}, trying Playwright: {str(e)}")
-                
-            # Fall back to Playwright if aiohttp fails
-            try:
-                async with async_playwright() as p:
-                    browser = await p.chromium.launch(headless=True)
-                    page = await browser.new_page()
-                    
-                    await page.goto(url)
-                    await page.wait_for_load_state("networkidle")
-                    
-                    html = await page.content()
-                    soup = BeautifulSoup(html, "html.parser")
-                    
-                        
-                    text = ' \n'.join(soup.stripped_strings)
-                    clean_content = await self.clean_text(text)
-                    
-                    await browser.close()
-                    return Document(
-                        page_content=clean_content,
-                        metadata={"source": url, "timestamp": datetime.now().isoformat()}
-                    )
-                    
-            except Exception as e:
-                print(f"Both methods failed for {url}: {str(e)}")
-                return None
+                logger.error(f"Both methods failed for {url}: {str(e)}")
+                return Document(
+                    page_content="No content found",
+                    metadata={"source": url, "timestamp": datetime.now().isoformat()}
+                )     
 
         async with aiohttp.ClientSession() as session:
             for i in range(0, len(urls), max_concurrent):

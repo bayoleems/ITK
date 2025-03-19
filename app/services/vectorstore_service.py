@@ -2,16 +2,16 @@ from typing import List
 from langchain.schema import Document
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
-import chromadb
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
-from utills.logging import logger
+from app.utils.logging import logger
 from dotenv import load_dotenv
+# import chromadb
 load_dotenv()
 
 class VectorStoreService:
     def __init__(self):
-        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=750,chunk_overlap=50)
+        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000,chunk_overlap=100)
         self.embeddings = OpenAIEmbeddings(api_key=os.getenv("OPENAI_API_KEY"), model='text-embedding-3-small')
         # self.chroma_client = chromadb.HttpClient(host='localhost', port=8000)
 

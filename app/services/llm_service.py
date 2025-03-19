@@ -1,6 +1,7 @@
 import os
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_chroma import Chroma
 from langchain_openai import ChatOpenAI
 from langchain_community.tools import DuckDuckGoSearchRun
 from app.models.web_search import WebSearchResult
@@ -8,16 +9,20 @@ from app.models.semantic_search import SemanticSearch
 
 class LLMService:
     def __init__(self):
-        self.model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
+        self.model = ChatOpenAI(
+            model="gpt-4o-mini", 
+            temperature=0, 
+            api_key=os.getenv("OPENAI_API_KEY")
+            )
         self.web_search_parser = PydanticOutputParser(pydantic_object=WebSearchResult)
         self.semantic_search_parser = PydanticOutputParser(pydantic_object=SemanticSearch)
 
-    async def semantic_search_llm(self, vector_store, query: str) -> SemanticSearch:
+    async def semantic_search_llm(self, vector_store: Chroma, query: str) -> SemanticSearch:
         """
         Query the vector store for relevant documents and structure them using LLM
         """
         # Get relevant documents from vector store
-        docs = vector_store.similarity_search(query, k=2)
+        docs = await vector_store.asimilarity_search(query, k=2)
 
         # Combine document contents 
         raw_text = ""
@@ -27,6 +32,15 @@ class LLMService:
             raw_text += f"Content: {doc.page_content}\n"
             raw_text += f"Source: {doc.metadata['source']}\n"
             raw_text += f"-----------------------------------\n"
+        
+        if not raw_text:
+            print(f"No relevant documents found for query: {query}")
+            return SemanticSearch(
+                query="",
+                results=[],
+                result_summary="",
+                metadata={}
+            )
 
         # Create prompt template
         prompt = ChatPromptTemplate.from_template(
@@ -45,12 +59,12 @@ class LLMService:
         
         # Create chain and run
         chain = prompt | self.model | self.semantic_search_parser
-        structured_response = chain.invoke({
+        structured_response = await chain.ainvoke({
             "text": raw_text,
             "query": query,
             "format_instructions": self.semantic_search_parser.get_format_instructions()
         })
-        
+
         return structured_response
 
     async def web_search_llm(self, query: str) -> WebSearchResult:
@@ -59,7 +73,7 @@ class LLMService:
         """
 
         search = DuckDuckGoSearchRun()
-        search_results = search.invoke(f"{query}")
+        search_results = await search.ainvoke(f"{query}")
         
         # Create prompt template
         prompt = ChatPromptTemplate.from_template(
@@ -79,11 +93,10 @@ class LLMService:
         
         # Create chain and run
         chain = prompt | self.model | self.web_search_parser
-        structured_response = chain.invoke({
+        structured_response = await chain.ainvoke({
             "text": search_results,
             "query": query,
             "format_instructions": self.web_search_parser.get_format_instructions()
         })
-
         
         return structured_response
