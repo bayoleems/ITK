@@ -46,7 +46,6 @@ class CompanyWebScraper:
                             metadata={"source": url, "timestamp": datetime.now().isoformat()}
                         )
                     else:
-                        logger.info(f"aiohttp failed for {url}, trying Playwright")
                         # Fall back to Playwright
                         async with async_playwright() as p:
                             browser = await p.chromium.launch(headless=True)
@@ -67,7 +66,7 @@ class CompanyWebScraper:
                                 metadata={"source": url, "timestamp": datetime.now().isoformat()}
                             )            
             except Exception as e:
-                logger.error(f"Both methods failed for {url}: {str(e)}")
+                logger.error(f"Both methods failed for {url}")
                 return Document(
                     page_content="No content found",
                     metadata={"source": url, "timestamp": datetime.now().isoformat()}

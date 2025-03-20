@@ -108,8 +108,6 @@ class ITKService:
         all_urls = df['URL'].tolist()
         results = await self.scrape_service.scrape_content(all_urls)
 
-        logger.info(f"scraped {len(results)} links")
-
         # Parse the results
         company_docs = self.parse_results(results, df)
 
